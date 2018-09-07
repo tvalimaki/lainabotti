@@ -47,6 +47,7 @@ function doPost(e) {
     var answer;
     var items;
     var borrowed;
+    var reply_markup;
 
     if (msg.from.last_name == undefined) {
       wholeName = msg.from.first_name;
@@ -69,7 +70,7 @@ function doPost(e) {
           answer = "Niin mitä halusit " + name + " lainata? " +
             "Kirjoita tavara samalle riville komennon kanssa niin osaan merkata sen lainatuksi.";
         }
-        sendText(id, answer, msg_id);
+        sendText(id, answer, msg_id, {'remove_keyboard': true, 'selective': true});
       }
       else if ( /^\/palauta/.test(text) ) {
         items = text.slice(9); // removes '/palauta '
@@ -87,6 +88,7 @@ function doPost(e) {
             //searchResult + 3 is row index.
             sheet.getRange(searchResult + 3, 9).setValue(new Date());
             answer = "OK " + name + ", palautin '" + items + "'.";
+            reply_markup = {'remove_keyboard': true, 'selective': true};
           }
           else {
             if (borrowed.items.length == 0) {
@@ -95,6 +97,12 @@ function doPost(e) {
             else {
               answer = "Sori " + name + ", en löytänyt että '" + items + "' ois sulla lainassa. " +
                 "Miten ois joku näistä: " + "'" + borrowed.items.join("', '") + "'";
+
+              reply_markup = {
+                'keyboard': makeKeyboard(borrowed.items),
+                'resize_keyboard': true,
+                'selective': true
+              };
             }
           }
         } else {
@@ -105,9 +113,15 @@ function doPost(e) {
             answer = "Niin mitä halusit " + name + " palauttaa? " +
               "Kirjoita tavara samalle riville komennon kanssa niin merkkaan sen palautetuksi. " +
                 "Miten ois joku näistä: " + "'" + borrowed.items.join("', '") + "'";
+
+            reply_markup = {
+              'keyboard': makeKeyboard(borrowed.items),
+              'resize_keyboard': true,
+              'selective': true
+            };
           }
         }
-        sendText(id, answer, msg_id);
+        sendText(id, answer, msg_id, reply_markup);
       }
       else if ( /^\/lainassa/.test(text) ) {
         borrowed = getBorrowed();
@@ -115,7 +129,7 @@ function doPost(e) {
         for (var i = 0; i < borrowed.items.length; i++) {
           answer += borrowed.borrower[i] + ": " + borrowed.items[i] + "\n";
         }
-        sendText(id, answer, msg_id);
+        sendText(id, answer, msg_id, {'remove_keyboard': true, 'selective': true});
       }
     }
   }
@@ -149,15 +163,35 @@ function getBorrowed(user) {
 }
 
 /**
+ * Make a custom keyboard layout for the items
+ */
+function makeKeyboard(items) {
+  var cols = items.length;
+  var rows = 1;
+  var grid = [];
+  for (var j = 0; j < cols; j++) {
+    grid[j] = Array(rows);
+  }
+  for (var i = 0; i < rows; i++) {
+    for (var k = 0; k < cols; k++) {
+      grid[k][i] = "/palauta " + items[k];
+    }
+  }
+  return grid;
+}
+
+
+/**
  * Send a message to the specified chat
  */
-function sendText(id,text,msg_id) {
+function sendText(id,text,msg_id,reply_markup) {
   var url = telegramUrl + "/";
   var payload = {
       'method': 'sendMessage',
       'chat_id': String(id),
       'reply_to_message_id': String(msg_id),
       'text': text,
+      'reply_markup': JSON.stringify(reply_markup),
       'parse_mode': 'HTML'
     };
     var data = {
