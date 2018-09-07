@@ -37,91 +37,133 @@ function doGet(e) {
  */
 function doPost(e) {
   var data = JSON.parse(e.postData.contents);
-  
+
   if ( data.hasOwnProperty('message') ) {
     var msg = data.message;
     var id = msg.chat.id;
+    var msg_id = msg.message_id;
     var name = msg.from.first_name;
+    var wholeName;
+    var answer;
+    var items;
+    var borrowed;
+
     if (msg.from.last_name == undefined) {
-      var wholeName = msg.from.first_name;
+      wholeName = msg.from.first_name;
     } else {
-      var wholeName = msg.from.first_name + " " + msg.from.last_name;
+      wholeName = msg.from.first_name + " " + msg.from.last_name;
     }
-    
+
     if ( msg.hasOwnProperty('entities') && msg.entities[0].type == 'bot_command' ) {
       var text = msg.text.replace(/^(\/[a-zA-Z]+)@Tekiila_lainabot/, '$1');
-      
+
       if ( /^\/start/.test(text) || /^\/help/.test(text) ) {
         sendText(id, helpText);
       }
       else if ( /\/lainaa/.test(text) ) {
-        var items = text.slice(8); // removes '/lainaa '
+        items = text.slice(8); // removes '/lainaa '
         if (items.length > 0) {
-          var answer = "OK " + name + ", merkkasin '" + items + "' sulle lainaan!";
+          answer = "OK " + name + ", merkkasin '" + items + "' sulle lainaan!";
           SpreadsheetApp.openById(ssId).getSheets()[0].appendRow(['', '', '', items, wholeName, '', '', new Date()]);
         } else {
-          var answer = "Niin mitä halusit " + name + " lainata? " +
+          answer = "Niin mitä halusit " + name + " lainata? " +
             "Kirjoita tavara samalle riville komennon kanssa niin osaan merkata sen lainatuksi.";
         }
-        sendText(id, answer);
+        sendText(id, answer, msg_id);
       }
       else if ( /^\/palauta/.test(text) ) {
-        var items = text.slice(9); // removes '/palauta '
+        items = text.slice(9); // removes '/palauta '
+        borrowed = getBorrowed(wholeName);
+
         if (items.length > 0) {
           var sheet = SpreadsheetApp.openById(ssId).getSheets()[0];
           var row = 3;
           var column = 4;
           var rangeValues = sheet.getRange(row, column, sheet.getLastRow(), sheet.getLastColumn()).getValues();
           var searchResult = rangeValues.findItemIndex(items, wholeName); //Row Index - 3
-          
+
           if(searchResult != -1)
           {
             //searchResult + 3 is row index.
             sheet.getRange(searchResult + 3, 9).setValue(new Date());
-            var answer = "OK " + name + ", palautin '" + items + "'.";
+            answer = "OK " + name + ", palautin '" + items + "'.";
           }
           else {
-            var answer = "Sori " + name + ", en löytänyt että '" + items + "' ois sulla lainassa. " +
-              "Tarkista mitä oot lainannu käyttämällä /lainassa.";
+            if (borrowed.items.length == 0) {
+              answer = name + " hei... sä et oo ees lainannu mitään.";
+            }
+            else {
+              answer = "Sori " + name + ", en löytänyt että '" + items + "' ois sulla lainassa. " +
+                "Miten ois joku näistä: " + "'" + borrowed.items.join("', '") + "'";
+            }
           }
         } else {
-          var answer = "Niin mitä halusit " + name + " palauttaa? " +
-            "Kirjoita tavara samalle riville komennon kanssa niin merkkaan sen palautetuksi. " +
-              "Jos et oo varma mitä lainasit, katso mitä on /lainassa.";
+          if (borrowed.items.length == 0) {
+            answer = name + " hei... sä et oo ees lainannu mitään.";
+          }
+          else {
+            answer = "Niin mitä halusit " + name + " palauttaa? " +
+              "Kirjoita tavara samalle riville komennon kanssa niin merkkaan sen palautetuksi. " +
+                "Miten ois joku näistä: " + "'" + borrowed.items.join("', '") + "'";
+          }
         }
-        sendText(id, answer);
+        sendText(id, answer, msg_id);
       }
       else if ( /^\/lainassa/.test(text) ) {
-        var sheet = SpreadsheetApp.openById(ssId).getSheets()[0];
-        var row = 3;
-        var column = 11;
-        var items = sheet.getRange(row, column, sheet.getLastRow()).getValues().clean('');
-        var borrower = sheet.getRange(row, column+1, sheet.getLastRow()).getValues().clean('');
-        var answer = "<b>Tällä hetkellä on lainassa:</b>\n";
-        for (var i = 0; i < items.length; i++) {
-          answer += borrower[i] + ": " + items[i] + "\n";
+        borrowed = getBorrowed();
+        answer = "<b>Tällä hetkellä on lainassa:</b>\n";
+        for (var i = 0; i < borrowed.items.length; i++) {
+          answer += borrowed.borrower[i] + ": " + borrowed.items[i] + "\n";
         }
-        sendText(id, answer);
+        sendText(id, answer, msg_id);
       }
     }
   }
 }
 
 /**
+ * Get borrowed items by user
+ */
+function getBorrowed(user) {
+  var sheet = SpreadsheetApp.openById(ssId).getSheets()[0];
+  var row = 3;
+  var column = 11;
+
+  var items = sheet.getRange(row, column, sheet.getLastRow()).getValues().clean('');
+  var borrower = sheet.getRange(row, column+1, sheet.getLastRow()).getValues().clean('');
+
+  if (!user) {
+    // do nothing
+  }
+  else {
+    items = items.filter(function (element, index) {
+      return borrower[index] == user;
+    });
+    borrower = user;
+  }
+
+  return {
+    items: items,
+    borrower: borrower
+  };
+}
+
+/**
  * Send a message to the specified chat
  */
-function sendText(id,text) {
+function sendText(id,text,msg_id) {
   var url = telegramUrl + "/";
   var payload = {
       'method': 'sendMessage',
       'chat_id': String(id),
+      'reply_to_message_id': String(msg_id),
       'text': text,
       'parse_mode': 'HTML'
-    }
+    };
     var data = {
       "method": "post",
       "payload": payload
-    }
+    };
   var response = UrlFetchApp.fetch(url, data);
   Logger.log(response.getContentText());
 }
@@ -136,14 +178,14 @@ Array.prototype.findItemIndex = function(search,name){
     if (this[i][0] == search && this[i][5] == '' && this[i][1] == name) return i;
   }
   return -1;
-}
+};
 
 /**
  * Remove specific values from the Array
  */
 Array.prototype.clean = function(deleteValue) {
   for (var i = 0; i < this.length; i++) {
-    if (this[i] == deleteValue) {         
+    if (this[i] == deleteValue) {
       this.splice(i, 1);
       i--;
     }
