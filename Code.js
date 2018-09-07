@@ -61,7 +61,7 @@ function doPost(e) {
       if ( /^\/start/.test(text) || /^\/help/.test(text) ) {
         sendText(id, helpText);
       }
-      else if ( /\/lainaa/.test(text) ) {
+      else if ( /^\/lainaa/.test(text) ) {
         items = text.slice(8); // removes '/lainaa '
         if (items.length > 0) {
           answer = "OK " + name + ", merkkasin '" + items + "' sulle lainaan!";
